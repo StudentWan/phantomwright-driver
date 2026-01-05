@@ -1010,6 +1010,24 @@ diff -ruN -x protocol.yml --minimal playwright/node_modules/playwright-core/src/
    }
  
    async querySelector(params: channels.FrameQuerySelectorParams, progress: Progress): Promise<channels.FrameQuerySelectorResult> {
+diff -ruN -x protocol.yml --minimal playwright/node_modules/playwright-core/src/server/dispatchers/jsHandleDispatcher.ts patchright/node_modules/playwright-core/src/server/dispatchers/jsHandleDispatcher.ts
+---
++++
+@@ -43,12 +43,12 @@
+   }
+ 
+   async evaluateExpression(params: channels.JSHandleEvaluateExpressionParams, progress: Progress): Promise<channels.JSHandleEvaluateExpressionResult> {
+-    const jsHandle = await progress.race(this._object.evaluateExpression(params.expression, { isFunction: params.isFunction }, parseArgument(params.arg)));
++    const jsHandle = await progress.race(this._object.evaluateExpression(params.expression, { isFunction: params.isFunction }, parseArgument(params.arg), params.isolatedContext));
+     return { value: serializeResult(jsHandle) };
+   }
+ 
+   async evaluateExpressionHandle(params: channels.JSHandleEvaluateExpressionHandleParams, progress: Progress): Promise<channels.JSHandleEvaluateExpressionHandleResult> {
+-    const jsHandle = await progress.race(this._object.evaluateExpressionHandle(params.expression, { isFunction: params.isFunction }, parseArgument(params.arg)));
++    const jsHandle = await progress.race(this._object.evaluateExpressionHandle(params.expression, { isFunction: params.isFunction }, parseArgument(params.arg), params.isolatedContext));
+     // If "jsHandle" is an ElementHandle, it belongs to the same frame as "this".
+     return { handle: ElementHandleDispatcher.fromJSOrElementHandle(this.parentScope() as FrameDispatcher, jsHandle) };
+   }
 diff -ruN -x protocol.yml --minimal playwright/node_modules/playwright-core/src/server/frameSelectors.ts patchright/node_modules/playwright-core/src/server/frameSelectors.ts
 ---
 +++
@@ -3961,6 +3979,24 @@ diff -ruN -x protocol.yml --minimal playwright/packages/playwright-core/src/serv
    }
  
    async querySelector(params: channels.FrameQuerySelectorParams, progress: Progress): Promise<channels.FrameQuerySelectorResult> {
+diff -ruN -x protocol.yml --minimal playwright/packages/playwright-core/src/server/dispatchers/jsHandleDispatcher.ts patchright/packages/playwright-core/src/server/dispatchers/jsHandleDispatcher.ts
+---
++++
+@@ -43,12 +43,12 @@
+   }
+ 
+   async evaluateExpression(params: channels.JSHandleEvaluateExpressionParams, progress: Progress): Promise<channels.JSHandleEvaluateExpressionResult> {
+-    const jsHandle = await progress.race(this._object.evaluateExpression(params.expression, { isFunction: params.isFunction }, parseArgument(params.arg)));
++    const jsHandle = await progress.race(this._object.evaluateExpression(params.expression, { isFunction: params.isFunction }, parseArgument(params.arg), params.isolatedContext));
+     return { value: serializeResult(jsHandle) };
+   }
+ 
+   async evaluateExpressionHandle(params: channels.JSHandleEvaluateExpressionHandleParams, progress: Progress): Promise<channels.JSHandleEvaluateExpressionHandleResult> {
+-    const jsHandle = await progress.race(this._object.evaluateExpressionHandle(params.expression, { isFunction: params.isFunction }, parseArgument(params.arg)));
++    const jsHandle = await progress.race(this._object.evaluateExpressionHandle(params.expression, { isFunction: params.isFunction }, parseArgument(params.arg), params.isolatedContext));
+     // If "jsHandle" is an ElementHandle, it belongs to the same frame as "this".
+     return { handle: ElementHandleDispatcher.fromJSOrElementHandle(this.parentScope() as FrameDispatcher, jsHandle) };
+   }
 diff -ruN -x protocol.yml --minimal playwright/packages/playwright-core/src/server/frameSelectors.ts patchright/packages/playwright-core/src/server/frameSelectors.ts
 ---
 +++

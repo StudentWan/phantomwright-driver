@@ -1088,7 +1088,7 @@ diff -ruN -x protocol.yml --minimal playwright/node_modules/playwright-core/src/
    }
  
    async abort(errorCode: string = 'failed') {
-@@ -658,6 +791,211 @@
+@@ -658,6 +791,220 @@
        });
      });
    }
@@ -1270,6 +1270,15 @@ diff -ruN -x protocol.yml --minimal playwright/node_modules/playwright-core/src/
 +
 +    		const trackedNetworkId = event.networkId;
 +    		try {
++    			// Skip fulfill for browser's privilege pages, such as Edge's new tab page.
++    			// These pages have special security contexts and Fetch.fulfillRequest may cause crashes
++    			const url = event.request?.url || '';
++    			const isPrivilegePage = url.startsWith("https://ntp.msn");
++    			if (isPrivilegePage) {
++    				await this._session._sendMayFail("Fetch.continueRequest", { requestId: event.requestId });
++    				return;
++    			}
++
 +    			if (event.resourceType !== 'Document')
 +    				return;
 +
@@ -5814,7 +5823,7 @@ diff -ruN -x protocol.yml --minimal playwright/packages/playwright-core/src/serv
    }
  
    async abort(errorCode: string = 'failed') {
-@@ -658,6 +791,211 @@
+@@ -658,6 +791,220 @@
        });
      });
    }
@@ -5996,6 +6005,15 @@ diff -ruN -x protocol.yml --minimal playwright/packages/playwright-core/src/serv
 +
 +    		const trackedNetworkId = event.networkId;
 +    		try {
++    			// Skip fulfill for browser's privilege pages, such as Edge's new tab page.
++    			// These pages have special security contexts and Fetch.fulfillRequest may cause crashes
++    			const url = event.request?.url || '';
++    			const isPrivilegePage = url.startsWith("https://ntp.msn");
++    			if (isPrivilegePage) {
++    				await this._session._sendMayFail("Fetch.continueRequest", { requestId: event.requestId });
++    				return;
++    			}
++
 +    			if (event.resourceType !== 'Document')
 +    				return;
 +

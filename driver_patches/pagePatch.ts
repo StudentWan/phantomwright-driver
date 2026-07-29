@@ -7,6 +7,9 @@ import { assertDefined } from "./utils.ts";
 export function patchPage(project: Project) {
 	// Add source file to the project
 	const pageSourceFile = project.addSourceFileAtPath("packages/playwright-core/src/server/page.ts");
+	const selectorParserImport = pageSourceFile.getImportDeclarationOrThrow("@isomorphic/selectorParser");
+	if (!selectorParserImport.getNamedImports().some(namedImport => namedImport.getName() === "splitSelectorByFrame"))
+		selectorParserImport.addNamedImport("splitSelectorByFrame");
 	pageSourceFile.addImportDeclaration({
 		moduleSpecifier: "./dom",
 		namespaceImport: "domValue",
@@ -27,7 +30,7 @@ export function patchPage(project: Project) {
 			throw new Error(\`Function "\${name}" has been already registered\`);
 		if (this.browserContext._pageBindings.has(name))
 			throw new Error(\`Function "\${name}" has been already registered in the browser context\`);
-		const binding = new PageBinding(this, name, playwrightBinding, needsHandle);
+		const binding = new PageBinding(this, name, playwrightBinding, false);
 		this._pageBindings.set(name, binding);
 		await this.delegate.exposeBinding(binding);
 		return binding;
@@ -44,7 +47,6 @@ export function patchPage(project: Project) {
 	allBindingsMethod.setBodyText(`
 		return [...this.browserContext._pageBindings.values(), ...this._pageBindings.values()];
 	`);
-
 
 	// ------- PageBinding Class -------
 	const pageBindingClass = pageSourceFile.getClassOrThrow("PageBinding");
@@ -85,8 +87,8 @@ export function patchPage(project: Project) {
 						debugLogger.log('error', deliveryError);
 						return;
 					}
-					const mainContext = await frame._mainContext().catch(() => null);
-					const utilityContext = await frame._utilityContext().catch(() => null);
+					const mainContext = await frame.mainContext().catch(() => null);
+					const utilityContext = await frame.utilityContext().catch(() => null);
 					for (const ctx of [mainContext, utilityContext]) {
 						if (!ctx || ctx === context)
 							continue;
@@ -131,12 +133,10 @@ export function patchPage(project: Project) {
 	const initScriptClass = pageSourceFile.getClassOrThrow("InitScript");
 	// -- InitScript Constructor --
 	const initScriptConstructorAssignment = assertDefined(
-		initScriptClass.getConstructors()[0]
+		initScriptClass
+			.getConstructors()[0]
 			.getStatements()
-			.find(s =>
-				s.getKind() === SyntaxKind.ExpressionStatement &&
-				s.getText().includes("this.source = `(() => {")
-			)
+			.find(s => s.getKind() === SyntaxKind.ExpressionStatement && s.getText().includes("this.source = `(() => {")),
 	);
 	initScriptConstructorAssignment.replaceWithText("this.source = `(() => { ${source} })();`;");
 
@@ -152,7 +152,7 @@ export function patchPage(project: Project) {
 			hasQuestionToken: true,
 		});
 		workerEvaluateMethod.replaceWithText(
-			workerEvaluateMethod.getText().replace(/await this\._executionContextPromise/g, "context")
+			workerEvaluateMethod.getText().replace(/await this\._executionContextPromise/g, "context"),
 		);
 		// Insert the new line of code after the responseAwaitStatement
 		workerEvaluateMethod.insertStatements(0, `
@@ -160,10 +160,26 @@ export function patchPage(project: Project) {
 			if (context instanceof domValue.FrameExecutionContext) {
 				const frame = context.frame;
 				if (frame) {
-					if (isolatedContext) context = await frame._utilityContext();
-					else if (!isolatedContext) context = await frame._mainContext();
+					if (isolatedContext) context = await frame.utilityContext();
+					else if (!isolatedContext) context = await frame.mainContext();
 				}
 			}
 		`);
 	}
+
+	const pagePerformLocatorHandlersCheckpointMethod = pageClass.getMethodOrThrow("_performLocatorHandlersCheckpoint");
+	const waitForHiddenStatement = pagePerformLocatorHandlersCheckpointMethod
+		.getDescendantsOfKind(SyntaxKind.ExpressionStatement)
+		.find(
+			statement =>
+				statement.getText() ===
+				"await this.mainFrame().waitForSelector(progress, handler.selector, false, { state: 'hidden' });",
+		);
+	if (waitForHiddenStatement)
+		waitForHiddenStatement.replaceWithText(`
+			const frameChunks = splitSelectorByFrame(handler.selector);
+			if (frameChunks.length > 1 && !await this.mainFrame().isVisibleInternal(progress, stringifySelector(frameChunks[0]), { strict: true }))
+				return;
+			await this.mainFrame().waitForSelector(progress, handler.selector, false, { state: 'hidden' });
+		`);
 }

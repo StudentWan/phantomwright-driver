@@ -4,6 +4,7 @@ import YAML from "yaml";
 
 import * as patches from "./driver_patches/index.ts";
 import * as clientPatches from "./patchright-nodejs/index.ts";
+import { formatFiles } from "./utils/format-indentation.ts";
 
 const project = new Project({
 	manipulationSettings: {
@@ -66,6 +67,11 @@ clientPatches.patchWorker(project);
 // ------------------------
 patches.patchBrowserContext(project);
 
+// --------------------
+// utils/build/build.js
+// --------------------
+patches.patchBuild(project);
+
 // ---------------------------
 // server/chromium/chromium.ts
 // ---------------------------
@@ -101,6 +107,11 @@ patches.patchCRCoverage(project);
 // ----------------------------------
 patches.patchCRServiceWorker(project);
 
+// ---------------------
+// server/credentials.ts
+// ---------------------
+patches.patchCredentials(project);
+
 // ----------------
 // server/frames.ts
 // ----------------
@@ -120,11 +131,6 @@ patches.patchCRPage(project);
 // server/page.ts
 // --------------
 patches.patchPage(project);
-
-// ---------------------------
-// server/utils/expectUtils.ts
-// ---------------------------
-patches.patchExpectUtils(project);
 
 // ---------------------------------------------
 // utils/isomorphic/utilityScriptSerializers.ts
@@ -165,6 +171,11 @@ patches.patchFrameDispatcher(project);
 // server/dispatchers/browserContextDispatcher.ts
 // ----------------------------------------------
 patches.patchBrowserContextDispatcher(project);
+
+// -----------------
+// server/network.ts
+// -----------------
+patches.patchNetwork(project);
 
 // ---------------------------------------------
 // server/dispatchers/networkDispatchers.ts
@@ -211,26 +222,44 @@ patches.patchSnapshotterInjected(project);
 // --------------------------------
 patches.patchTracing(project);
 
-// -------------------------
-// protocol/protocol.yml
-// -------------------------
-const protocol = YAML.parse(await fs.readFile("packages/protocol/src/protocol.yml", "utf8"));
-
-// isolatedContext parameters
-for (const type of ["Frame", "JSHandle", "Worker"]) {
-	const commands = protocol[type].commands;
-	commands.evaluateExpression.parameters.isolatedContext = "boolean?";
-	commands.evaluateExpressionHandle.parameters.isolatedContext = "boolean?";
+// ----------------------
+// protocol/spec/*.yml
+// ----------------------
+async function mutateYaml(path: string, callback: (document: any) => void) {
+	const document = YAML.parse(await fs.readFile(path, "utf8"));
+	callback(document);
+	await fs.writeFile(path, YAML.stringify(document));
 }
-protocol.Frame.commands.evalOnSelectorAll.parameters.isolatedContext = "boolean?";
 
-// focusControl parameter
-protocol.ContextOptions.properties.focusControl = "boolean?";
+await mutateYaml("packages/protocol/spec/frame.yml", protocol => {
+	protocol.Frame.commands.evaluateExpression.parameters.isolatedContext = "boolean?";
+	protocol.Frame.commands.evaluateExpressionHandle.parameters.isolatedContext = "boolean?";
+	protocol.Frame.commands.evalOnSelectorAll.parameters.isolatedContext = "boolean?";
+});
+await mutateYaml("packages/protocol/spec/handles.yml", protocol => {
+	protocol.JSHandle.commands.evaluateExpression.parameters.isolatedContext = "boolean?";
+	protocol.JSHandle.commands.evaluateExpressionHandle.parameters.isolatedContext = "boolean?";
+});
+await mutateYaml("packages/protocol/spec/worker.yml", protocol => {
+	protocol.Worker.commands.evaluateExpression.parameters.isolatedContext = "boolean?";
+	protocol.Worker.commands.evaluateExpressionHandle.parameters.isolatedContext = "boolean?";
+});
+await mutateYaml("packages/protocol/spec/mixins.yml", protocol => {
+	protocol.ContextOptions.properties.focusControl = "boolean?";
+});
+await mutateYaml("packages/protocol/spec/network.yml", protocol => {
+	protocol.Route.commands.continue.parameters.patchrightInitScript = "boolean?";
+});
 
-// Internal init-script route marker
-protocol.Route.commands.continue.parameters.patchrightInitScript = "boolean?";
-
-await fs.writeFile("packages/protocol/src/protocol.yml", YAML.stringify(protocol));
-
-// Save the changes without reformatting
+// Save and format all patched TypeScript sources before they are built.
 await project.save();
+await formatFiles(
+	project.getSourceFiles().map(sourceFile => sourceFile.getFilePath()),
+	{
+		arrowParens: "avoid",
+		printWidth: 120,
+		singleQuote: true,
+		tabWidth: 2,
+		useTabs: false,
+	},
+);

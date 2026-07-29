@@ -5,7 +5,9 @@ import { type Project, SyntaxKind } from "ts-morph";
 // -------------------------------------
 export function patchFrameDispatcher(project: Project) {
 	// Add source file to the project
-	const frameDispatcherSourceFile = project.addSourceFileAtPath("packages/playwright-core/src/server/dispatchers/frameDispatcher.ts");
+	const frameDispatcherSourceFile = project.addSourceFileAtPath(
+		"packages/playwright-core/src/server/dispatchers/frameDispatcher.ts",
+	);
 
 	// ------- frameDispatcher Class -------
 	const frameDispatcherClass = frameDispatcherSourceFile.getClassOrThrow("FrameDispatcher");
@@ -15,11 +17,12 @@ export function patchFrameDispatcher(project: Project) {
 	frameEvaluateExpressionMethod.setBodyText(`
 		return {
 			value: serializeResult(
-				await progress.race(
-					this._frame.evaluateExpression(
-						params.expression,
-						{ isFunction: params.isFunction, world: params.isolatedContext ? 'utility': 'main' },
-						parseArgument(params.arg)
+					await progress.race(
+						this._frame.evaluateExpression(
+							progress,
+							params.expression,
+							{ isFunction: params.isFunction, world: params.isolatedContext ? 'utility': 'main' },
+							parseArgument(params.arg)
 					)
 				)
 			)
@@ -32,11 +35,12 @@ export function patchFrameDispatcher(project: Project) {
 		return {
 			handle: ElementHandleDispatcher.fromJSOrElementHandle(
 				this,
-				await progress.race(
-					this._frame.evaluateExpressionHandle(
-						params.expression,
-						{ isFunction: params.isFunction, world: params.isolatedContext ? 'utility': 'main' },
-						parseArgument(params.arg)
+					await progress.race(
+						this._frame.evaluateExpressionHandle(
+							progress,
+							params.expression,
+							{ isFunction: params.isFunction, world: params.isolatedContext ? 'utility': 'main' },
+							parseArgument(params.arg)
 					)
 				)
 			)
@@ -47,10 +51,11 @@ export function patchFrameDispatcher(project: Project) {
 	const frameEvalOnSelectorAllExpressionMethod = frameDispatcherClass.getMethodOrThrow("evalOnSelectorAll");
 	frameEvalOnSelectorAllExpressionMethod.setBodyText(`
 		return {
-			value: serializeResult(
-				await this._frame.evalOnSelectorAll(
-					params.selector,
-					params.expression,
+				value: serializeResult(
+					await this._frame.evalOnSelectorAll(
+						progress,
+						params.selector,
+						params.expression,
 					params.isFunction,
 					parseArgument(params.arg),
 					null,
